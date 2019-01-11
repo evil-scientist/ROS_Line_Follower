@@ -1,27 +1,16 @@
-#include <ros/ros.h>
-
-#include <sensor_msgs/CompressedImage.h>
-#include <sensor_msgs/image_encodings.h>
-#include <image_transport/image_transport.h>
-#include <cv_bridge/cv_bridge.h>
-
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
-
-#include <geometry_msgs/Twist.h> 
-#include <stdlib.h>
-
-
+#include <iostream>
+#include <stdio.h>
 using namespace cv;
 using namespace std;
 
+vector<Mat> Images;
 int N_SLICES = 4;
 float WEIGHT[4];
 int PT[4];
-
-ros::Publisher pub;
 
 Mat RemoveBackground(Mat image)
 {
@@ -29,18 +18,17 @@ Mat RemoveBackground(Mat image)
 
     Mat lower(1,1, CV_8UC3, Scalar(0,0,0));
 	Mat upper(1,1, CV_8UC3, Scalar(100,100,100));
-	//cout << "lower = "<< endl << ""  << lower << endl << endl;
-	//cout << "upper = "<< endl << ""  << upper << endl << endl;
 	inRange(image, lower, upper, mask);
-	//	cout << "mask = "<< endl << " "  << mask << endl << endl;
-	//	cout << "image = "<< endl << " "  << image << endl << endl;
-	//	cout << "in range passed"<< endl;
+	//cout << "mask = "<< endl << " "  << mask << endl << endl;
+	//cout << "image = "<< endl << " "  << image << endl << endl;
+	//cout << "in range passed"<< endl;
 	bitwise_and(image, image, resultAnd, mask=mask);
 	bitwise_not(resultAnd,resultNot,mask);
 	
 	subtract(Scalar::all(255),resultNot,resultMask);
-	return resultMask;
-}
+		
+	return resultMask;	
+ }
 
 Point getContourCenter(vector<Point> contour)
 {
@@ -104,9 +92,15 @@ void Process(Mat img, int index)
 	vector<Vec4i> hierarchy;
 	Mat imgray,thresh;
 	
-	cvtColor(img,imgray,COLOR_BGR2GRAY);
-	double ret = threshold(imgray,thresh,100,255,THRESH_BINARY_INV);
+	/*cvtColor(img,imgray,COLOR_BGR2GRAY);
+	double ret = threshold(imgray,thresh,100,255,THRESH_BINARY_INV);	
 	findContours(thresh,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
+*/
+	cvtColor(img,imgray,COLOR_BGR2GRAY);
+	adaptiveThreshold(imgray, imgray,255,ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY,75,10);  
+ 	cv::bitwise_not(imgray, imgray);  
+	findContours(imgray,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
+
 
 	prev_MC = MainContour;
 
@@ -188,10 +182,14 @@ void Process(Mat img, int index)
 			
 			placeholder2.x = (contourCenterX + 20);
 			placeholder2.y = (middle.y + 35);
-			PT[index] = middle.x-contourCenterX;
+
+
 			WEIGHT[index] = getContourExtent(MainContour);
-			String pt = to_string(PT[index]);
+			PT[index] = middle.x-contourCenterX;
+
+			String pt = to_string(PT[index]);			
 			String weight = "Weight:" + to_string(WEIGHT[index]);
+			
 			putText(img,pt, placeholder1, FONT_HERSHEY_SIMPLEX, 1, Scalar(200,0,200),2);
 			putText(img,weight, placeholder2, FONT_HERSHEY_SIMPLEX , 0.5,Scalar(200,0,200),1);
 		}
@@ -202,70 +200,44 @@ void Process(Mat img, int index)
 	}	
 }
 
-void SlicePart(Mat im, int slices)
-{
+void SlicePart(Mat im, vector<Mat> images, int slices)
+{	
 	int sl = int(im.rows/slices);	
 	
-	//cout << sl << endl;
 	for (int i = 0; i < slices; i++)
 	{
 		int part = sl*i;
-		//cout << im.rows << endl;
-		//crop_img = im[part:part+sl, 0:width] 
-		//cout << part << " " << part+sl << endl;
 		Mat crop_img = im(Rect(0,part,im.cols,sl));
 		Process(crop_img, i);
 	}
 }
-
-void imageCallback(const sensor_msgs::ImageConstPtr& msg)
+int main(int argc, char** argv )
 {
-	cv_bridge::CvImagePtr frame_pointer;
-	frame_pointer = cv_bridge::toCvCopy(msg,sensor_msgs::image_encodings::BGR8);
-	Mat frame;
-	//0 = 90 ACW
-	rotate(frame_pointer->image, frame, 0);
- 	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
+	Mat frame,test;
+
+	frame = imread(argv[1], IMREAD_COLOR);   // Read the file
+	if (frame.empty()) 
+	{
+		cerr << "ERROR! blank frame grabbed\n";
+		return 0;
+	}
+	
+	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
 	Mat croppedImage = frame(myROI);
+
+	//Mat nobg = RemoveBackground(croppedImage);
+	//SlicePart(nobg, Images, N_SLICES);
+
 	SlicePart(croppedImage, Images, N_SLICES);
 	namedWindow("Final", WINDOW_NORMAL);
 	imshow("Final", croppedImage);
-/*	for(int i = 0; i < N_SLICES; i++)
+	
+	for(int i = 0; i < N_SLICES; i++)
 	{
 		cout << PT[i] << endl;
 	}	
-*/	
-	geometry_msgs::Twist velmsg;
-	velmsg.linear.x=1;
-	velmsg.angular.z=PT[3];
-	pub.publish(velmsg);
-	if (velmsg.angular.z > 0)
-	{
-		ROS_INFO("Turn Left");
-	}
-	else if (velmsg.angular.z < 0)
-	{
-		ROS_INFO("Turn Right");
-	} 
-}
-
-int main(int argc, char **argv)
-{
-  ros::init(argc, argv, "get_image");
-  ros::NodeHandle n;
-  pub = n.advertise<geometry_msgs::Twist>("cmd_vel", 100);
-
-  cv::startWindowThread();
-  
-//  ros::Rate rate(10);
-  
-  image_transport::ImageTransport it(n);
-  image_transport::Subscriber sub = it.subscribe("camera/image", 1, imageCallback);
-  
-  
-//  rate.sleep();
-  
-  ros::spin();
-  cv::destroyWindow("Final");
-  return 0;
+	waitKey(0);
+	destroyWindow("Final");
+	
+	return 0;
 }
