@@ -227,7 +227,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	rotate(frame_pointer->image, frame, 0);
  	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
 	Mat croppedImage = frame(myROI);
-	SlicePart(croppedImage, Images, N_SLICES);
+	SlicePart(croppedImage, N_SLICES);
 	namedWindow("Final", WINDOW_NORMAL);
 	imshow("Final", croppedImage);
 /*	for(int i = 0; i < N_SLICES; i++)
