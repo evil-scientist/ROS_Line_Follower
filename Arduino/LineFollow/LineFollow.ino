@@ -34,23 +34,23 @@ ROS COMMAND : rosrun rosserial_python serial_node.py /dev/ttyACM0
 #define BASE_RATE 127
 
 // Ultrasonic sensor SR-04
-#define echo_int 0 // Interrupt id for echo pulse
-#define NUMBER_TICKS 40000 // Used for counting 200ms with 50uS Timer Interrupt
+#define NUMBER_TICKS 4000 // Used for counting 200ms with 50uS Timer Interrupt
 #define trigPin 23 
 #define echoPin 22   
 #define THRESHOLD 5 // Threshold Distance for stopping(cm)
 
 #include <ros.h>
 #include <geometry_msgs/Twist.h>
+//#include <String.h>
 
-/* // For Bluetooth
+ // For Bluetooth
 class NewHardware : public ArduinoHardware {
 public: NewHardware():ArduinoHardware(&Serial1, 57600)
 {};
 }; 
 
 ros::NodeHandle_<NewHardware> nh;
-*/
+
 
 volatile long echo_start = 0;                         
 volatile long echo_end = 0;                          
@@ -60,52 +60,8 @@ volatile int trigger_time_counter = 0;
 unsigned long lastCallTime = 0; // For timeout
 int Multiplier = 1; // Set by SR-04 (Distance)
 int SLEEPING = 0; // FLAG to see if in sleep mode
-ros::NodeHandle nh;
 
-void trigger_pulse()
-{
-  static volatile int state = 0; // Default state
-  if (!(--trigger_time_counter))   // counter to count to 200mS and send pulse [check distance every 200 ms]
-  {                                          
-      trigger_time_counter = NUMBER_TICKS;  // Reload counter value [50uS * 4000 = 200 mS]
-      state = 1; // go to state 1 and send Pulse NOW
-  }    
-  switch(state)
-  {
-      case 0:  // Default state -> do nothing
-              break;
-      case 1: 
-              digitalWrite(trigPin, HIGH); // Pulse start 
-              state = 2;                   // and go to state 2 
-              break;                       //in next interrupt
-      case 2:
-             digitalWrite(trigPin, LOW); // Pulse stop
-             state = 0;                  // go to state 0 in next interrupt
-             break;
-  }
-}
-
-// Note: this routine does not handle the case where the timer counter overflows which will result in the occassional error.
-void echo_interrupt()
-{
-  unsigned long distance_cm = 0;
-  if (digitalRead(echoPin) == HIGH)
-  {
-      echo_end = 0;                                 
-      echo_start = micros();                        
-  }      
-  else
-  { 
-      echo_end = micros();                          
-      echo_duration = echo_end - echo_start;
-      distance_cm = (echo_duration/2) / 29.1;
-      if (distance_cm < THRESHOLD) 
-      {
-        Multiplier = 0;
-      }
-  }
-}
-
+//ros::NodeHandle nh;
 // Motor Control
 void moveForward(int speedForward)
 {
@@ -130,22 +86,86 @@ void brake()
     digitalWrite(FWD2,LOW);
     digitalWrite(EN2,LOW);  
 }
-void moveRight(int degree)
+void moveRight(int turnspeed)
 {
     //digitalWrite(REV2,HIGH);
-    analogWrite(REV1,degree);
+//    analogWrite(FEV1,(turnspeed*));
+    analogWrite(REV1,turnspeed);
     digitalWrite(EN1,HIGH);    
 }
-void moveLeft(int degree)
+void moveLeft(int turnspeed)
 {
     //digitalWrite(REV2,HIGH);
-    analogWrite(REV2,degree);
+    analogWrite(REV2,turnspeed);
     digitalWrite(EN2,HIGH);    
 }
+//
+//void echo_int()
+//{
+//  unsigned long distance_cm = 0;
+//  if (digitalRead(echoPin) == HIGH)
+//  {
+//      echo_end = 0;                                 
+//      echo_start = micros();                        
+//  }      
+// else{     
+//      echo_end = micros();                          
+//      echo_duration = echo_end - echo_start ;
+//      distance_cm = (echo_duration/2) / 29.1;
+//      nh.loginfo(distance_cm);
+//      if (distance_cm < THRESHOLD) 
+//      {
+//        Multiplier = 0;
+//        brake();
+//      }
+//  }
+//}
+
+void trigger_pulse()
+{
+  char result[8]; 
+  static volatile int state = 0; // Default state
+  float distance_cm = 0;
+  if (!(--trigger_time_counter))   // counter to count to 200mS and send pulse [check distance every 200 ms]
+  {                                          
+      trigger_time_counter = NUMBER_TICKS;  // Reload counter value [50uS * 4000 = 200 mS]
+      state = 1; // go to state 1 and send Pulse NOW
+  }    
+  switch(state)
+  {
+      case 0:  // Default state -> do nothing
+              break;
+      case 1: 
+              digitalWrite(trigPin, HIGH); // Pulse start 
+              state = 2;                   // and go to state 2 
+              break;                       //in next interrupt
+      case 2:
+             digitalWrite(trigPin, LOW); // Pulse stop
+             echo_duration = pulseIn(echoPin, HIGH);
+             distance_cm = (echo_duration/2) / 29.1;
+             //dtostrf(distance_cm, 6, 2, result);
+            // nh.loginfo(result);  
+            if (distance_cm < THRESHOLD) 
+            {
+              Multiplier = 0;
+              brake();
+            }
+            else{
+              Multiplier = 1;  
+            }
+             state = 0;
+             break;
+  
+  }
+}
+
+
 
 // Callback to process Geometry/Twist message
 void velocityCallback(const geometry_msgs::Twist& msg)
 {
+  //cli(); // stop interrupts 
+  //nh.loginfo("Inside callback");
   if (msg.linear.x > 0) // Positive velocity
   {
       moveForward(BASE_RATE*Multiplier);
@@ -156,14 +176,15 @@ void velocityCallback(const geometry_msgs::Twist& msg)
   }
   if (msg.angular.z < 0) // Turn Right
   {
-      moveRight(msg.angular.z*Multiplier);
+      moveRight(BASE_RATE*msg.angular.z*-1);
   }
   if (msg.angular.z > 0) // Turn Left
   {
-      moveLeft(msg.angular.z*Multiplier);
+      moveLeft(BASE_RATE*msg.angular.z);
   }
-  lastCallTime = millis(); // Reset lastCallTime
-  SLEEPING = 0;
+  //sei();
+//  lastCallTime = millis(); // Reset lastCallTime
+ // SLEEPING = 0;
 }
 
 void sleep()
@@ -207,7 +228,7 @@ void setup()
   sei(); // allow interrupts
 
   // External Interrupt for Hardware Pin Echo
-  attachInterrupt(echo_int, echo_interrupt, CHANGE);  // interrupt ID = 0
+  //attachInterrupt(echo_int, echo_interrupt, CHANGE);  // interrupt ID = 0
 }
 
 ISR(TIMER1_COMPA_vect)

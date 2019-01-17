@@ -234,19 +234,45 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	{
 		cout << PT[i] << endl;
 	}	
-*/	
+*/	int linear_speed,turn_multiplier,lower_mean,upper_mean = 0;
 	geometry_msgs::Twist velmsg;
-	velmsg.linear.x=1;
-	velmsg.angular.z=PT[3];
+	lower_mean = (PT[3]+PT[2])/2;
+	upper_mean = (PT[1]+PT[0])/2;
+	int indicator = abs(lower_mean- upper_mean);		
+	if (indicator<50)
+	{
+		turn_multiplier = 1;
+		linear_speed = 1;
+	}
+	else if (50<=indicator<200)
+	{
+		turn_multiplier = 0.7;
+		linear_speed = 0.5;	
+	}
+	else if (200<indicator)
+	{
+		turn_multiplier = 0.3;
+		linear_speed = 0.1;	
+	}
+	if (upper_mean<0)
+	{
+		turn_multiplier = -turn_multiplier;
+	}
+	velmsg.linear.x=linear_speed;
+	velmsg.angular.z=turn_multiplier;
 	pub.publish(velmsg);
-	if (velmsg.angular.z > 0)
+	
+	// ROS_INFO("Lower mean: %d",(PT[3]+PT[2]/2));
+	// ROS_INFO("Upper mean: %d",(PT[1]+PT[0]/2));
+	
+	/*if (velmsg.angular.z > 0)
 	{
 		ROS_INFO("Turn Left");
 	}
 	else if (velmsg.angular.z < 0)
 	{
 		ROS_INFO("Turn Right");
-	} 
+	}*/ 
 }
 
 int main(int argc, char **argv)
