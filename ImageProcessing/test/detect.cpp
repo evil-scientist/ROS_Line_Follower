@@ -12,6 +12,7 @@ int N_SLICES = 4;
 float WEIGHT[4];
 int PT[4];
 
+
 Mat RemoveBackground(Mat image)
 {
     Mat mask, resultAnd, resultNot, resultMask;
@@ -95,7 +96,7 @@ void Process(Mat img, int index)
 	/*cvtColor(img,imgray,COLOR_BGR2GRAY);
 	double ret = threshold(imgray,thresh,100,255,THRESH_BINARY_INV);	
 	findContours(thresh,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
-*/
+	*/
 	cvtColor(img,imgray,COLOR_BGR2GRAY);
 	adaptiveThreshold(imgray, imgray,255,ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY,75,10);  
  	cv::bitwise_not(imgray, imgray);  
@@ -124,17 +125,12 @@ void Process(Mat img, int index)
 		   		}
 		    }
 
-		    //cout << "Width : " << img.cols << endl;
-			//cout << "Height: " << img.rows << endl;
-		
 			int width = img.cols;
 			int height = img.rows;
 
 			middle.x = int(width/2); //Get X coordenate of the middle point
 			middle.y = int(height/2); //Get Y coordenate of the middle point
-			
-			//cout << middleY << " " << middleX << endl;	
-		
+					
 			prev_cX = contourCenterX;
 			contourCenter = getContourCenter(MainContour);
 			if (contourCenter != zero)
@@ -196,7 +192,7 @@ void Process(Mat img, int index)
 	}
 	catch ( cv::Exception & e )
 	{	
-	 	//cerr << e.msg << endl; // output exception message
+
 	}	
 }
 
@@ -225,17 +221,48 @@ int main(int argc, char** argv )
 	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
 	Mat croppedImage = frame(myROI);
 
-	//Mat nobg = RemoveBackground(croppedImage);
-	//SlicePart(nobg, Images, N_SLICES);
-
 	SlicePart(croppedImage, Images, N_SLICES);
 	namedWindow("Final", WINDOW_NORMAL);
 	imshow("Final", croppedImage);
 	
-	for(int i = 0; i < N_SLICES; i++)
+	int lower_mean,upper_mean, indicator; 
+	float linear_speed = 0.0;
+	float turn_multiplier = 0.0;
+
+	lower_mean = (PT[3]+PT[2])/2;
+	upper_mean = (PT[1]+PT[0])/2;
+	
+	indicator = abs(lower_mean- upper_mean);		
+	
+	cout << "upper_mean: " << upper_mean << endl;
+	if (indicator<75)
 	{
-		cout << PT[i] << endl;
-	}	
+		turn_multiplier = 0;
+		linear_speed = 1;
+	}
+	else if (indicator>= 50 && indicator<200)
+	{
+		turn_multiplier = 0.7;
+		linear_speed = 0.5;	
+	}
+	else
+	{
+		turn_multiplier = 0.3;
+		linear_speed = 0.1;	
+	}
+	if (upper_mean<0 && turn_multiplier != 0)
+	{
+		turn_multiplier = turn_multiplier*-1;
+		cout << "Turn Right " << endl;
+	}
+	else if (upper_mean>0 && turn_multiplier != 0)
+	{
+		cout << "Turn Left " << endl;
+	}
+
+	cout << "linear_speed: " << linear_speed << endl;
+	cout << "turn_multiplier: " << turn_multiplier << endl;
+
 	waitKey(0);
 	destroyWindow("Final");
 	

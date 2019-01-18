@@ -29,8 +29,7 @@ Mat RemoveBackground(Mat image)
 
     Mat lower(1,1, CV_8UC3, Scalar(0,0,0));
 	Mat upper(1,1, CV_8UC3, Scalar(100,100,100));
-	//cout << "lower = "<< endl << ""  << lower << endl << endl;
-	//cout << "upper = "<< endl << ""  << upper << endl << endl;
+
 	inRange(image, lower, upper, mask);
 	//	cout << "mask = "<< endl << " "  << mask << endl << endl;
 	//	cout << "image = "<< endl << " "  << image << endl << endl;
@@ -104,9 +103,14 @@ void Process(Mat img, int index)
 	vector<Vec4i> hierarchy;
 	Mat imgray,thresh;
 	
-	cvtColor(img,imgray,COLOR_BGR2GRAY);
+/*	cvtColor(img,imgray,COLOR_BGR2GRAY);
 	double ret = threshold(imgray,thresh,100,255,THRESH_BINARY_INV);
 	findContours(thresh,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
+*/
+	cvtColor(img,imgray,COLOR_BGR2GRAY);
+	adaptiveThreshold(imgray, imgray,255,ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY,75,10);  
+ 	cv::bitwise_not(imgray, imgray);  
+	findContours(imgray,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
 
 	prev_MC = MainContour;
 
@@ -130,17 +134,12 @@ void Process(Mat img, int index)
 		   		}
 		    }
 
-		    //cout << "Width : " << img.cols << endl;
-			//cout << "Height: " << img.rows << endl;
-		
 			int width = img.cols;
 			int height = img.rows;
 
 			middle.x = int(width/2); //Get X coordenate of the middle point
 			middle.y = int(height/2); //Get Y coordenate of the middle point
-			
-			//cout << middleY << " " << middleX << endl;	
-		
+					
 			prev_cX = contourCenterX;
 			contourCenter = getContourCenter(MainContour);
 			if (contourCenter != zero)
@@ -198,7 +197,7 @@ void Process(Mat img, int index)
 	}
 	catch ( cv::Exception & e )
 	{	
-	 	//cerr << e.msg << endl; // output exception message
+
 	}	
 }
 
@@ -206,13 +205,9 @@ void SlicePart(Mat im, int slices)
 {
 	int sl = int(im.rows/slices);	
 	
-	//cout << sl << endl;
 	for (int i = 0; i < slices; i++)
 	{
 		int part = sl*i;
-		//cout << im.rows << endl;
-		//crop_img = im[part:part+sl, 0:width] 
-		//cout << part << " " << part+sl << endl;
 		Mat crop_img = im(Rect(0,part,im.cols,sl));
 		Process(crop_img, i);
 	}
@@ -223,56 +218,52 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	cv_bridge::CvImagePtr frame_pointer;
 	frame_pointer = cv_bridge::toCvCopy(msg,sensor_msgs::image_encodings::BGR8);
 	Mat frame;
+
 	//0 = 90 ACW
+
 	rotate(frame_pointer->image, frame, 0);
  	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
 	Mat croppedImage = frame(myROI);
 	SlicePart(croppedImage, N_SLICES);
 	namedWindow("Final", WINDOW_NORMAL);
 	imshow("Final", croppedImage);
-/*	for(int i = 0; i < N_SLICES; i++)
-	{
-		cout << PT[i] << endl;
-	}	
-*/	int linear_speed,turn_multiplier,lower_mean,upper_mean = 0;
+
+	int lower_mean,upper_mean = 0;
+	float linear_speed = 0.0;
+	float turn_multiplier = 0.0;
 	geometry_msgs::Twist velmsg;
 	lower_mean = (PT[3]+PT[2])/2;
 	upper_mean = (PT[1]+PT[0])/2;
 	int indicator = abs(lower_mean- upper_mean);		
-	if (indicator<50)
+	
+	if (indicator<75)
 	{
-		turn_multiplier = 1;
+		turn_multiplier = 0;
 		linear_speed = 1;
 	}
-	else if (50<=indicator<200)
+	else if (indicator>= 50 && indicator<200)
 	{
 		turn_multiplier = 0.7;
 		linear_speed = 0.5;	
 	}
-	else if (200<indicator)
+	else
 	{
 		turn_multiplier = 0.3;
 		linear_speed = 0.1;	
 	}
-	if (upper_mean<0)
+	if (upper_mean<0 && turn_multiplier != 0)
 	{
-		turn_multiplier = -turn_multiplier;
+		turn_multiplier = turn_multiplier*-1;
+//		cout << "Turn Right " << endl;
 	}
+	else if (upper_mean>0 && turn_multiplier != 0)
+	{
+//		cout << "Turn Left " << endl;
+	}
+
 	velmsg.linear.x=linear_speed;
 	velmsg.angular.z=turn_multiplier;
 	pub.publish(velmsg);
-	
-	// ROS_INFO("Lower mean: %d",(PT[3]+PT[2]/2));
-	// ROS_INFO("Upper mean: %d",(PT[1]+PT[0]/2));
-	
-	/*if (velmsg.angular.z > 0)
-	{
-		ROS_INFO("Turn Left");
-	}
-	else if (velmsg.angular.z < 0)
-	{
-		ROS_INFO("Turn Right");
-	}*/ 
 }
 
 int main(int argc, char **argv)
@@ -282,15 +273,10 @@ int main(int argc, char **argv)
   pub = n.advertise<geometry_msgs::Twist>("cmd_vel", 100);
 
   cv::startWindowThread();
-  
-//  ros::Rate rate(10);
-  
+    
   image_transport::ImageTransport it(n);
   image_transport::Subscriber sub = it.subscribe("camera/image", 1, imageCallback);
-  
-  
-//  rate.sleep();
-  
+    
   ros::spin();
   cv::destroyWindow("Final");
   return 0;
