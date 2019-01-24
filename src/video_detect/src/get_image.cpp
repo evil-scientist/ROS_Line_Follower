@@ -20,6 +20,7 @@ using namespace std;
 int N_SLICES = 4;
 float WEIGHT[4];
 int PT[4];
+int STOP = 0;
 
 ros::Publisher pub;
 
@@ -194,6 +195,15 @@ void Process(Mat img, int index)
 			putText(img,pt, placeholder1, FONT_HERSHEY_SIMPLEX, 1, Scalar(200,0,200),2);
 			putText(img,weight, placeholder2, FONT_HERSHEY_SIMPLEX , 0.5,Scalar(200,0,200),1);
 		}
+		else
+		{
+			if (index == 1)
+			{
+				STOP = 1;
+			}
+			//cout << "No Countour for :" << index << endl;
+			//imshow("No Countour", img);
+		}
 	}
 	catch ( cv::Exception & e )
 	{	
@@ -256,11 +266,16 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 		turn_multiplier = turn_multiplier*-1;
 //		cout << "Turn Right " << endl;
 	}
-	else if (upper_mean>0 && turn_multiplier != 0)
+	
+/*	else if (upper_mean>0 && turn_multiplier != 0)
 	{
 //		cout << "Turn Left " << endl;
-	}
+	}*/
 
+	if (STOP == 1)
+	{
+		linear_speed = 0;
+	}
 	velmsg.linear.x=linear_speed;
 	velmsg.angular.z=turn_multiplier;
 	pub.publish(velmsg);

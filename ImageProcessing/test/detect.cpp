@@ -11,7 +11,7 @@ vector<Mat> Images;
 int N_SLICES = 4;
 float WEIGHT[4];
 int PT[4];
-
+int STOP = 0;
 
 Mat RemoveBackground(Mat image)
 {
@@ -93,11 +93,11 @@ void Process(Mat img, int index)
 	vector<Vec4i> hierarchy;
 	Mat imgray,thresh;
 	
-	// OLD TECH WORKED FOR BLACK
-	/*cvtColor(img,imgray,COLOR_BGR2GRAY);
+/*	// OLD TECH WORKED FOR BLACK
+	cvtColor(img,imgray,COLOR_BGR2GRAY);
 	double ret = threshold(imgray,thresh,100,255,THRESH_BINARY_INV);	
 	findContours(thresh,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
-	*/
+*/	
 
 	// NEW TECH WORKED FOR RED
 	cvtColor(img,imgray,COLOR_BGR2GRAY);
@@ -106,11 +106,11 @@ void Process(Mat img, int index)
 	findContours(imgray,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
 
 
-	
-/*	// TRYING CANNY	
+/*	
+	// TRYING CANNY	
 	cvtColor(img,imgray,COLOR_BGR2GRAY);
 	Canny(imgray, thresh, 50, 200, 3);
-	//imshow("Canny", thresh);
+	imshow("Canny", thresh);
 	findContours(thresh,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
 */
 
@@ -200,6 +200,15 @@ void Process(Mat img, int index)
 			putText(img,pt, placeholder1, FONT_HERSHEY_SIMPLEX, 1, Scalar(200,0,200),2);
 			putText(img,weight, placeholder2, FONT_HERSHEY_SIMPLEX , 0.5,Scalar(200,0,200),1);
 		}
+		else
+		{
+			if (index == 1)
+			{
+				STOP = 1;
+			}
+			//cout << "No Countour for :" << index << endl;
+			//imshow("No Countour", img);
+		}
 	}
 	catch ( cv::Exception & e )
 	{	
@@ -255,6 +264,7 @@ int main(int argc, char** argv )
 	
 	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
 	Mat croppedImage = frame(myROI);
+	//croppedImage = RemoveBackground(croppedImage);
 	
 	SlicePart(croppedImage, Images, N_SLICES);
 	namedWindow("Final", WINDOW_NORMAL);
@@ -294,7 +304,10 @@ int main(int argc, char** argv )
 	{
 		cout << "Turn Left " << endl;
 	}
-
+	if (STOP == 1)
+	{
+		linear_speed = 0;
+	}
 	cout << "linear_speed: " << linear_speed << endl;
 	cout << "turn_multiplier: " << turn_multiplier << endl;
 	
