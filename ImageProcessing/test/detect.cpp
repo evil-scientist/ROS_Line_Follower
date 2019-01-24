@@ -93,15 +93,26 @@ void Process(Mat img, int index)
 	vector<Vec4i> hierarchy;
 	Mat imgray,thresh;
 	
+	// OLD TECH WORKED FOR BLACK
 	/*cvtColor(img,imgray,COLOR_BGR2GRAY);
 	double ret = threshold(imgray,thresh,100,255,THRESH_BINARY_INV);	
 	findContours(thresh,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
 	*/
+
+	// NEW TECH WORKED FOR RED
 	cvtColor(img,imgray,COLOR_BGR2GRAY);
 	adaptiveThreshold(imgray, imgray,255,ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY,75,10);  
  	cv::bitwise_not(imgray, imgray);  
 	findContours(imgray,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
 
+
+	
+/*	// TRYING CANNY	
+	cvtColor(img,imgray,COLOR_BGR2GRAY);
+	Canny(imgray, thresh, 50, 200, 3);
+	//imshow("Canny", thresh);
+	findContours(thresh,contours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE);
+*/
 
 	prev_MC = MainContour;
 
@@ -217,10 +228,34 @@ int main(int argc, char** argv )
 		cerr << "ERROR! blank frame grabbed\n";
 		return 0;
 	}
+
+
+	/*Mat frame;
+	VideoCapture cap;
+	
+	int deviceID = 0;             // 0 = open default camera
+	int apiID = cv::CAP_ANY;      // 0 = autodetect default API
+	
+	cap.open(deviceID + apiID);
+	if (!cap.isOpened()) 
+	{
+		cerr << "ERROR! Unable to open camera\n";
+		return -1;
+	}
+	cout << "Start grabbing" << endl << "Press any key to terminate" << endl;
+	for (;;)
+	{
+		cap.read(frame);
+		if (frame.empty()) 
+		{
+			cerr << "ERROR! blank frame grabbed\n";
+			break;
+		}*/
+
 	
 	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
 	Mat croppedImage = frame(myROI);
-
+	
 	SlicePart(croppedImage, Images, N_SLICES);
 	namedWindow("Final", WINDOW_NORMAL);
 	imshow("Final", croppedImage);
@@ -262,7 +297,12 @@ int main(int argc, char** argv )
 
 	cout << "linear_speed: " << linear_speed << endl;
 	cout << "turn_multiplier: " << turn_multiplier << endl;
-
+	
+/*	if (waitKey(5) >= 0)
+		{
+			break;
+		}
+*/
 	waitKey(0);
 	destroyWindow("Final");
 	
