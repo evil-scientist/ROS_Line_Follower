@@ -31,18 +31,18 @@ ROS COMMAND : rosrun rosserial_python serial_node.py /dev/ttyACM0
 #define LED 13
 
 // SPEED Control
-#define BASE_RATE 127
+#define BASE_RATE 120
 
 // Ultrasonic sensor SR-04
 #define trigPin 23 
 #define echoPin 22   
-#define THRESHOLD 5 // Threshold Distance for stopping(cm)
+#define THRESHOLD 7 // Threshold Distance for stopping(cm)
 
 // TIMER 1
 #define NUMBER_TICKS 4000 // Used for counting 200ms with 50uS Timer Interrupt
 
-// TIMER 2
-#define NUMBER_TICKS_2 200 // Used for counting 200ms with 1ms Timer Interrupt
+// TIMER 1 SLEEP
+#define NUMBER_TICKS_2 4000 // Used for counting 200ms with 1ms Timer Interrupt
 
 #include <ros.h>
 #include <geometry_msgs/Twist.h>
@@ -53,7 +53,7 @@ volatile long echo_duration = 0;
 volatile int trigger_time_counter = 0;
 volatile int trigger_time_counter_2 = 0;
 float Multiplier = 1; // Set by SR-04 (Distance)
-
+int Ultrasonic = 1;
 // For Bluetooth
 class NewHardware : public ArduinoHardware {
 public: NewHardware():ArduinoHardware(&Serial1, 57600)
@@ -64,17 +64,24 @@ ros::NodeHandle_<NewHardware> nh;
 
 //ros::NodeHandle nh;
 // Motor Control
-void moveForward(int speedForward)
+void moveForward(float speedForward)
 {
+    
     analogWrite(FWD1,speedForward);
     analogWrite(FWD2,speedForward);
+    digitalWrite(REV1,LOW);
+    digitalWrite(REV2,LOW);
+    
     digitalWrite(EN1,HIGH);
     digitalWrite(EN2,HIGH);
 }
-void moveBackward(int speedBackward)
+void moveBackward(float speedBackward)
 {
     analogWrite(REV1,speedBackward);
     analogWrite(REV2,speedBackward);
+    digitalWrite(FWD1,LOW);
+    digitalWrite(FWD2,LOW);
+    
     digitalWrite(EN1,HIGH);
     digitalWrite(EN2,HIGH);
 }
@@ -87,47 +94,57 @@ void brake()
     digitalWrite(FWD2,LOW);
     digitalWrite(EN2,LOW);  
 }
-void moveRight(int turnspeed)
+void moveRight(float linear, float turnspeed)
 {
     //digitalWrite(REV2,HIGH);
-//    analogWrite(FEV1,(turnspeed*));
-    analogWrite(REV1,turnspeed);
-    digitalWrite(EN1,HIGH);    
-}
-void moveLeft(int turnspeed)
-{
-    //digitalWrite(REV2,HIGH);
+    analogWrite(FWD1, linear);
+    analogWrite(FWD2, linear);
+    
     analogWrite(REV2,turnspeed);
+    digitalWrite(REV1,LOW);
+    digitalWrite(EN1,HIGH);
     digitalWrite(EN2,HIGH);    
+        
+}
+void moveLeft(float linear, float turnspeed)
+{
+    //digitalWrite(REV2,HIGH);
+    analogWrite(FWD1, linear);
+    analogWrite(FWD2, linear);
+
+    analogWrite(REV1,turnspeed);
+    digitalWrite(REV2,LOW);
+    digitalWrite(EN1,HIGH);
+    digitalWrite(EN2,HIGH);        
 }
 
 // Callback to process Geometry/Twist message
 void velocityCallback(const geometry_msgs::Twist& msg)
 {
-  TIMSK2 |= (0 << OCIE2A); // disable timer compare interrupt NOT SLEEPING  
+ // TIMSK2 |= (0 << OCIE2A); // disable timer compare interrupt NOT SLEEPING  
   //cli(); // stop interrupts 
   //nh.loginfo("Inside callback");
   
-  if (msg.linear.x > 0) // Positive velocity
+  if (msg.linear.x > 0 && msg.angular.z == 0) // Positive velocity
   {
       moveForward(BASE_RATE*Multiplier);
   }
-  if (msg.linear.x < 0) // Negative Velocity
+  if (msg.linear.x < 0 && msg.angular.z == 0) // Negative Velocity
   {
       moveBackward(BASE_RATE*Multiplier);
   }
   if (msg.angular.z < 0) // Turn Right
   {
-      moveRight(BASE_RATE*msg.angular.z*-1);
+      moveRight(BASE_RATE*msg.linear.x*Ultrasonic ,BASE_RATE*msg.angular.z*-1*Ultrasonic);
   }
   if (msg.angular.z > 0) // Turn Left
   {
-      moveLeft(BASE_RATE*msg.angular.z);
+      moveLeft(BASE_RATE*msg.linear.x*Ultrasonic,BASE_RATE*msg.angular.z*Ultrasonic);
   }
   
   //sei();
-  trigger_time_counter_2 = 200;  // Reload counter value [200 mS]
-  TIMSK2 |= (1 << OCIE2A); // enable timer compare interrupt for SLEEP  
+  trigger_time_counter_2 = NUMBER_TICKS;  // Reload counter value [200 mS]
+  //TIMSK2 |= (1 << OCIE2A); // enable timer compare interrupt for SLEEP  
   
 }
 
@@ -162,15 +179,15 @@ void setup()
   TCCR1B |= (1 << WGM12);// turn on CTC mode
   TCCR1B |= (0 << CS12) | (0 << CS11) | (1 << CS10); // Set CS12, CS11 and CS10 bits for 1 prescaler   
   TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt   
-
-  // TIMER 2 interrupt every 1 mS
-  TCCR2A = 0; // set entire TCCR1A register to 0
-  TCCR1B = 0; // same for TCCR1B
-  TCNT2  = 0; // initialize counter value to 0
-  OCR2A = 255; //  1 millisecond cycle -----------> compare match register = [ 16,000,000Hz/ (prescaler * desired interrupt frequency) ] - 1
-  TCCR2A |= (1 << WGM21);// turn on CTC mode
-  TCCR2B |= (1 << CS22) | (0 << CS21) | (0 << CS20); // Set CS12, CS11 and CS10 bits for 64 prescaler   
-  TIMSK2 |= (1 << OCIE2A); // enable timer compare interrupt   
+//
+//  // TIMER 2 interrupt every 1 mS
+//  TCCR2A = 0; // set entire TCCR1A register to 0
+//  TCCR1B = 0; // same for TCCR1B
+//  TCNT2  = 0; // initialize counter value to 0
+//  OCR2A = 255; //  1 millisecond cycle -----------> compare match register = [ 16,000,000Hz/ (prescaler * desired interrupt frequency) ] - 1
+//  TCCR2A |= (1 << WGM21);// turn on CTC mode
+//  TCCR2B |= (1 << CS22) | (0 << CS21) | (0 << CS20); // Set CS12, CS11 and CS10 bits for 64 prescaler   
+//  TIMSK2 |= (1 << OCIE2A); // enable timer compare interrupt   
   sei(); // allow interrupts
 }
 
@@ -183,7 +200,13 @@ ISR(TIMER1_COMPA_vect)
   {                                          
       trigger_time_counter = NUMBER_TICKS;  // Reload counter value [50uS * 4000 = 200 mS]
       state = 1; // go to state 1 and send Pulse NOW
+  }
+  if (trigger_time_counter_2 == 0)   // counter to count to 200mS and send pulse [check if Alive every 200 ms]
+  {                                          
+      trigger_time_counter_2 = NUMBER_TICKS_2;  // Reload counter value
+      brake();
   }    
+  --trigger_time_counter_2;     
   switch(state)
   {
       case 0:  // Default state -> do nothing
@@ -201,11 +224,14 @@ ISR(TIMER1_COMPA_vect)
             if (distance_cm < THRESHOLD) 
             {
               Multiplier = 0;
+              Ultrasonic = 0;
               brake();
             }
             else
             {
               Multiplier = distance_cm/10;
+              Ultrasonic = 1;
+            
             }
             state = 0;
             break;

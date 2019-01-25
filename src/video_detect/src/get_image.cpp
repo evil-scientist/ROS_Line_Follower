@@ -120,6 +120,10 @@ void Process(Mat img, int index)
 	{
 		if(contours.size() != 0)
 		{
+			if (index == 1)
+			{
+				STOP = 0;
+			}
 			// Find the area of contour
 			for(int i = 0; i < contours.size(); i++)
 			{
@@ -234,6 +238,9 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	rotate(frame_pointer->image, frame, 0);
  	Rect myROI(0, frame.rows/2, frame.cols, frame.rows/2);
 	Mat croppedImage = frame(myROI);
+	
+	//croppedImage = RemoveBackground(croppedImage);
+	
 	SlicePart(croppedImage, N_SLICES);
 	namedWindow("Final", WINDOW_NORMAL);
 	imshow("Final", croppedImage);
@@ -246,36 +253,44 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 	upper_mean = (PT[1]+PT[0])/2;
 	int indicator = abs(lower_mean- upper_mean);		
 	
-	if (indicator<75)
+	if (indicator<100)
 	{
 		turn_multiplier = 0;
-		linear_speed = 1;
+		linear_speed = 0.7;
 	}
-	else if (indicator>= 50 && indicator<200)
+	//else if (indicator>= 100 && indicator<200)
+	else
 	{
 		turn_multiplier = 0.7;
-		linear_speed = 0.5;	
+		linear_speed = 0.6;	
 	}
-	else
+/*	else
 	{
 		turn_multiplier = 0.3;
 		linear_speed = 0.1;	
 	}
-	if (upper_mean<0 && turn_multiplier != 0)
+*/	if (upper_mean<0 && turn_multiplier != 0)
 	{
 		turn_multiplier = turn_multiplier*-1;
 //		cout << "Turn Right " << endl;
+		ROS_INFO("Turn Right");
+
 	}
 	
-/*	else if (upper_mean>0 && turn_multiplier != 0)
+	else if (upper_mean>0 && turn_multiplier != 0)
 	{
 //		cout << "Turn Left " << endl;
-	}*/
+		ROS_INFO("Turn Left");
+
+	}
 
 	if (STOP == 1)
 	{
 		linear_speed = 0;
 	}
+	ROS_INFO("linear_speed: %f",linear_speed);
+	ROS_INFO("angular_speed: %f",turn_multiplier);
+	
 	velmsg.linear.x=linear_speed;
 	velmsg.angular.z=turn_multiplier;
 	pub.publish(velmsg);
